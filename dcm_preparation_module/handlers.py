@@ -4,7 +4,7 @@ from pathlib import Path
 
 from data_plumber_http import Property, Object, Url, Array, String
 from data_plumber_http.settings import Responses
-from dcm_common.services.handlers import TargetPath
+from dcm_common.services.handlers import TargetPath, UUID
 
 from dcm_preparation_module.models import (
     Target,
@@ -170,9 +170,10 @@ def get_preparation_handler(cwd: Path):
                     "sigPropOperations",
                 ],
             ),
+            Property("token"): UUID(),
             Property("callbackUrl", name="callback_url"): Url(
                 schemes=["http", "https"]
             ),
         },
-        accept_only=["preparation", "callbackUrl"],
+        accept_only=["preparation", "token", "callbackUrl"],
     ).assemble()

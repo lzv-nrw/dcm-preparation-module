@@ -2,7 +2,7 @@ from setuptools import setup
 
 
 setup(
-    version="0.1.0",
+    version="0.2.0",
     name="dcm-preparation-module",
     description="flask app for dcm-preparation-module-containers",
     author="LZV.nrw",
@@ -11,7 +11,7 @@ setup(
         "PyYAML==6.*",
         "bagit>=1.7.0,<2.0.0",
         "data-plumber-http>=1.0.0,<2",
-        "dcm-common[services, db, orchestration]>=3.25.0,<4",
+        "dcm-common[services, db, orchestration]>=3.28.0,<4",
         "dcm-preparation-module-api>=0.1.0,<1",
     ],
     packages=[

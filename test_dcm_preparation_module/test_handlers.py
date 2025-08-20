@@ -580,6 +580,33 @@ def _preparation_handler(fixtures):
                 },
                 Responses.GOOD.status,
             ),
+            (  # token
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                    },
+                    "token": None,
+                },
+                422,
+            ),
+            (
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                    },
+                    "token": "non-uuid",
+                },
+                422,
+            ),
+            (
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                    },
+                    "token": "37ee72d6-80ab-4dcd-a68d-f8d32766c80d",
+                },
+                Responses.GOOD.status,
+            ),
         ]
     ),
     ids=[f"stage {i+1}" for i in range(len(pytest_args))],
