@@ -7,13 +7,15 @@ from shutil import copytree
 from pathlib import Path
 from xml.etree import ElementTree
 from functools import partial
+import os
+from uuid import uuid4
 
 from bagit import Bag
-from flask import Blueprint, jsonify, Response
+from flask import Blueprint, jsonify, Response, request
 from data_plumber_http.decorators import flask_handler, flask_args, flask_json
-from dcm_common import LoggingContext as Context
+from dcm_common import LoggingContext
 from dcm_common.util import get_output_path
-from dcm_common.orchestration import JobConfig, Job
+from dcm_common.orchestra import JobConfig, JobContext, JobInfo
 from dcm_common import services
 
 from dcm_preparation_module.config import AppConfig
@@ -33,6 +35,11 @@ class PreparationView(services.OrchestratedView):
         # initialize MetadataOperator
         self.metadata_operator = MetadataOperator()
 
+    def register_job_types(self):
+        self.config.worker_pool.register_job_type(
+            self.NAME, self.prepare, Report
+        )
+
     def configure_bp(self, bp: Blueprint, *args, **kwargs) -> None:
 
         @bp.route("/prepare", methods=["POST"])
@@ -51,47 +58,33 @@ class PreparationView(services.OrchestratedView):
         ):
             """Prepare IP for SIP-transformation."""
             try:
-                token = self.orchestrator.submit(
-                    JobConfig(
-                        request_body={
-                            "preparation": preparation.json,
-                            "callback_url": callback_url,
-                        },
-                        context=self.NAME,
+                token = self.config.controller.queue_push(
+                    token or str(uuid4()),
+                    JobInfo(
+                        JobConfig(
+                            self.NAME,
+                            original_body=request.json,
+                            request_body={
+                                "preparation": preparation.json,
+                                "callback_url": callback_url,
+                            },
+                        ),
+                        report=Report(
+                            host=request.host_url, args=request.json
+                        ),
                     ),
-                    token=token,
                 )
-            except ValueError as exc_info:
+            # pylint: disable=broad-exception-caught
+            except Exception as exc_info:
                 return Response(
                     f"Submission rejected: {exc_info}",
                     mimetype="text/plain",
-                    status=400,
+                    status=500,
                 )
 
             return jsonify(token.json), 201
 
         self._register_abort_job(bp, "/prepare")
-
-    def get_job(self, config: JobConfig) -> Job:
-        return Job(
-            cmd=lambda push, data: self.prepare(
-                push,
-                data,
-                preparation_config=PreparationConfig.from_json(
-                    config.request_body["preparation"]
-                ),
-            ),
-            hooks={
-                "startup": services.default_startup_hook,
-                "success": services.default_success_hook,
-                "fail": services.default_fail_hook,
-                "abort": services.default_abort_hook,
-                "completion": services.termination_callback_hook_factory(
-                    config.request_body.get("callback_url", None),
-                ),
-            },
-            name="Preparation Module",
-        )
 
     @staticmethod
     def load_baginfo(bag: Bag) -> dict:
@@ -164,55 +157,54 @@ class PreparationView(services.OrchestratedView):
             encoding="utf-8",
         )
 
-    def prepare(
-        self, push, report: Report, preparation_config: PreparationConfig
-    ):
-        """
-        Job instructions for the '/prepare' endpoint.
-
-        Orchestration standard-arguments:
-        push -- (orchestration-standard) push `report` to host process
-        report -- (orchestration-standard) common report-object shared
-                  via `push`
-
-        Keyword arguments:
-        preparation_config -- a `PreparationConfig`-config
-        """
+    def prepare(self, context: JobContext, info: JobInfo):
+        """Job instructions for the '/prepare' endpoint."""
+        os.chdir(self.config.FS_MOUNT_POINT)
+        preparation_config = PreparationConfig.from_json(
+            info.config.request_body["preparation"]
+        )
+        info.report.log.set_default_origin("Preparation Module")
 
         # set progress info
-        report.progress.verbose = (
+        info.report.progress.verbose = (
             f"preparing IP from '{preparation_config.target.path}'"
         )
-        report.log.log(
-            Context.INFO,
+        info.report.log.log(
+            LoggingContext.INFO,
             body=f"Preparing IP from '{preparation_config.target.path}'.",
         )
-        push()
+        context.push()
 
         # Create path for the prepared IP or exit if not successful
-        report.data.path = get_output_path(self.config.PREPARED_IP_OUTPUT)
-        if report.data.path is None:
-            report.data.success = False
-            report.log.log(
-                Context.ERROR,
+        info.report.data.path = get_output_path(self.config.PREPARED_IP_OUTPUT)
+        if info.report.data.path is None:
+            info.report.data.success = False
+            info.report.log.log(
+                LoggingContext.ERROR,
                 body="Unable to generate output directory in "
                 + f"'{self.config.FS_MOUNT_POINT / self.config.PREPARED_IP_OUTPUT}'"
                 + "(maximum retries exceeded).",
             )
-            push()
+            context.push()
+            # make callback; rely on _run_callback to push progress-update
+            info.report.progress.complete()
+            self._run_callback(
+                context, info, info.config.request_body.get("callback_url")
+            )
             return
-        report.log.log(
-            Context.INFO, body=f"Preparing IP at '{report.data.path}'."
+        info.report.log.log(
+            LoggingContext.INFO,
+            body=f"Preparing IP at '{info.report.data.path}'.",
         )
-        push()
+        context.push()
 
         # copy target IP to output path
         copytree(
             preparation_config.target.path,
-            report.data.path,
+            info.report.data.path,
             dirs_exist_ok=True,
         )
-        bag = Bag(str(report.data.path))
+        bag = Bag(str(info.report.data.path))
 
         # prepare IP
         for stage, src_md, operations, apply in [
@@ -225,13 +217,13 @@ class PreparationView(services.OrchestratedView):
             (
                 "sigPropOperations",
                 self.load_significant_properties(
-                    report.data.path / self.config.SIGPROP_FILE_PATH,
+                    info.report.data.path / self.config.SIGPROP_FILE_PATH,
                     self.config.SIGPROP_PREMIS_NAMESPACE,
                 ),
                 preparation_config.sig_prop_operations,
                 partial(
                     self.apply_significant_properties,
-                    report.data.path / self.config.SIGPROP_FILE_PATH,
+                    info.report.data.path / self.config.SIGPROP_FILE_PATH,
                 ),
             ),
         ]:
@@ -240,18 +232,23 @@ class PreparationView(services.OrchestratedView):
                 source_metadata=src_md,
                 operations=operations,
             )
-            report.log.merge(operator_result.log)
-            push()
+            info.report.log.merge(operator_result.log)
+            context.push()
 
             # exit if preparation failed
-            if Context.ERROR in report.log:
-                report.data.success = False
-                report.log.log(
-                    Context.ERROR,
+            if LoggingContext.ERROR in info.report.log:
+                info.report.data.success = False
+                info.report.log.log(
+                    LoggingContext.ERROR,
                     body=f"Preparing IP from '{preparation_config.target.path}'"
                     + f" failed during stage '{stage}'.",
                 )
-                push()
+                context.push()
+                # make callback; rely on _run_callback to push progress-update
+                info.report.progress.complete()
+                self._run_callback(
+                    context, info, info.config.request_body.get("callback_url")
+                )
                 return
 
             apply(operator_result)
@@ -261,9 +258,15 @@ class PreparationView(services.OrchestratedView):
         bag.save(processes=1, manifests=False)
 
         # set success and log
-        report.data.success = True
-        report.log.log(
-            Context.INFO,
-            body=f"Successfully prepared IP at '{report.data.path}'.",
+        info.report.data.success = True
+        info.report.log.log(
+            LoggingContext.INFO,
+            body=f"Successfully prepared IP at '{info.report.data.path}'.",
         )
-        push()
+        context.push()
+
+        # make callback; rely on _run_callback to push progress-update
+        info.report.progress.complete()
+        self._run_callback(
+            context, info, info.config.request_body.get("callback_url")
+        )

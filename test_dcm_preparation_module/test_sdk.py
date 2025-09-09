@@ -12,12 +12,6 @@ from dcm_preparation_module import app_factory
 from dcm_preparation_module.views import PreparationView
 
 
-@pytest.fixture(name="app")
-def _app(testing_config):
-    testing_config.ORCHESTRATION_AT_STARTUP = True
-    return app_factory(testing_config(), as_process=True)
-
-
 @pytest.fixture(name="default_sdk", scope="module")
 def _default_sdk():
     return dcm_preparation_module_sdk.DefaultApi(
@@ -41,11 +35,13 @@ def _preparation_sdk():
 
 
 def test_default_ping(
-    default_sdk: dcm_preparation_module_sdk.DefaultApi, app, run_service
+    default_sdk: dcm_preparation_module_sdk.DefaultApi,
+    testing_config,
+    run_service,
 ):
     """Test default endpoint `/ping-GET`."""
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     response = default_sdk.ping()
 
@@ -53,11 +49,13 @@ def test_default_ping(
 
 
 def test_default_status(
-    default_sdk: dcm_preparation_module_sdk.DefaultApi, app, run_service
+    default_sdk: dcm_preparation_module_sdk.DefaultApi,
+    testing_config,
+    run_service,
 ):
     """Test default endpoint `/status-GET`."""
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     response = default_sdk.get_status()
 
@@ -66,13 +64,12 @@ def test_default_status(
 
 def test_default_identify(
     default_sdk: dcm_preparation_module_sdk.DefaultApi,
-    app,
     run_service,
     testing_config,
 ):
     """Test default endpoint `/identify-GET`."""
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     response = default_sdk.identify()
 
@@ -81,7 +78,6 @@ def test_default_identify(
 
 def test_prepare_report_minimal(
     preparation_sdk: dcm_preparation_module_sdk.PreparationApi,
-    app,
     run_service,
     testing_config,
 ):
@@ -90,7 +86,7 @@ def test_prepare_report_minimal(
     (no operations).
     """
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     submission = preparation_sdk.prepare(
         {"preparation": {"target": {"path": str("test_ip")}}}
@@ -109,12 +105,12 @@ def test_prepare_report_minimal(
 
 def test_prepare_report_404(
     preparation_sdk: dcm_preparation_module_sdk.PreparationApi,
-    app,
     run_service,
+    testing_config,
 ):
     """Test prepare endpoint `/report-GET` without previous submission."""
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     with pytest.raises(
         dcm_preparation_module_sdk.rest.ApiException
@@ -185,7 +181,6 @@ def test_prepare_report_404(
 )
 def test_prepare_sdk_patch_broken_operations_anyof(
     preparation_sdk: dcm_preparation_module_sdk.PreparationApi,
-    app,
     run_service,
     baginfo_operations,
     expected_error,
@@ -196,7 +191,7 @@ def test_prepare_sdk_patch_broken_operations_anyof(
     `broken_operations_anyof`.
     """
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     if expected_error is not None:
         with pytest.raises(expected_error):
@@ -232,7 +227,6 @@ def test_prepare_sdk_patch_broken_operations_anyof(
 
 def test_prepare_report_multiple_baginfo_operations(
     preparation_sdk: dcm_preparation_module_sdk.PreparationApi,
-    app,
     run_service,
     testing_config,
     fixtures,
@@ -242,7 +236,7 @@ def test_prepare_report_multiple_baginfo_operations(
     bagInfoOperations.
     """
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     submission = preparation_sdk.prepare(
         {
@@ -303,7 +297,6 @@ def test_prepare_report_multiple_baginfo_operations(
 
 def test_prepare_report_multiple_sig_prop_operations(
     preparation_sdk: dcm_preparation_module_sdk.PreparationApi,
-    app,
     run_service,
     testing_config,
     fixtures,
@@ -313,7 +306,7 @@ def test_prepare_report_multiple_sig_prop_operations(
     sigPropOperations.
     """
 
-    run_service(app, port=8083, probing_path="ready")
+    run_service(from_factory=lambda: app_factory(testing_config()), port=8083)
 
     submission = preparation_sdk.prepare(
         {
@@ -363,7 +356,9 @@ def test_prepare_report_multiple_sig_prop_operations(
     assert report.data.success
 
     assert (testing_config().FS_MOUNT_POINT / report.data.path).is_dir()
-    assert Bag(str(testing_config.FS_MOUNT_POINT / report.data.path)).is_valid()
+    assert Bag(
+        str(testing_config.FS_MOUNT_POINT / report.data.path)
+    ).is_valid()
 
     input_sigprop = PreparationView.load_significant_properties(
         fixtures / "test_ip" / testing_config.SIGPROP_FILE_PATH,

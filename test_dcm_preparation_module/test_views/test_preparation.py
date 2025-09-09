@@ -6,30 +6,34 @@ from uuid import uuid4
 import pytest
 from bagit import Bag
 
+from dcm_preparation_module import app_factory
+
 
 @pytest.fixture(name="minimal_request_body")
 def _minimal_request_body():
     return {"preparation": {"target": {"path": str("test_ip")}}}
 
 
-def test_prepare_minimal(
-    client, testing_config, minimal_request_body, wait_for_report
-):
+def test_prepare_minimal(testing_config, minimal_request_body):
     """
     Test minimal functionality of /prepare-POST endpoint
     (no operations).
     """
 
+    app = app_factory(testing_config())
+    client = app.test_client()
+
     # submit job
     response = client.post("/prepare", json=minimal_request_body)
-    assert client.put("/orchestration?until-idle", json={}).status_code == 200
 
     assert response.status_code == 201
     assert response.mimetype == "application/json"
     token = response.json["value"]
 
     # wait until job is completed
-    json = wait_for_report(client, token)
+    app.extensions["orchestra"].stop(stop_on_idle=True)
+    json = client.get(f"/report?token={token}").json
+
     assert json["data"]["success"]
     assert "path" in json["data"]
     assert (testing_config.FS_MOUNT_POINT / json["data"]["path"]).is_dir()
@@ -42,16 +46,17 @@ def test_prepare_minimal(
 # only need test integration of models/handlers/components/views and to
 # validate that the MetadataOperator is actually called/Bag is updated
 def test_prepare_with_baginfo_operations(
-    client,
     testing_config,
     fixtures,
     minimal_request_body,
-    wait_for_report,
 ):
     """
     Test functionality of /prepare-POST endpoint for non-empty
     bagInfoOperations.
     """
+
+    app = app_factory(testing_config())
+    client = app.test_client()
 
     minimal_request_body["preparation"]["bagInfoOperations"] = [
         {
@@ -80,14 +85,14 @@ def test_prepare_with_baginfo_operations(
 
     # submit job
     response = client.post("/prepare", json=minimal_request_body)
-    assert client.put("/orchestration?until-idle", json={}).status_code == 200
 
     assert response.status_code == 201
     assert response.mimetype == "application/json"
     token = response.json["value"]
 
     # wait until job is completed
-    json = wait_for_report(client, token)
+    app.extensions["orchestra"].stop(stop_on_idle=True)
+    json = client.get(f"/report?token={token}").json
 
     assert json["data"]["success"]
 
@@ -106,15 +111,16 @@ def test_prepare_with_baginfo_operations(
 # only need test integration of models/handlers/components/views and to
 # validate that the MetadataOperator is actually called/Bag is updated
 def test_prepare_with_sig_prop_operations(
-    client,
     testing_config,
     minimal_request_body,
-    wait_for_report,
 ):
     """
     Test functionality of /prepare-POST endpoint for non-empty
     sigPropOperations.
     """
+
+    app = app_factory(testing_config())
+    client = app.test_client()
 
     minimal_request_body["preparation"]["sigPropOperations"] = [
         {
@@ -143,14 +149,14 @@ def test_prepare_with_sig_prop_operations(
 
     # submit job
     response = client.post("/prepare", json=minimal_request_body)
-    assert client.put("/orchestration?until-idle", json={}).status_code == 200
 
     assert response.status_code == 201
     assert response.mimetype == "application/json"
     token = response.json["value"]
 
     # wait until job is completed
-    json = wait_for_report(client, token)
+    app.extensions["orchestra"].stop(stop_on_idle=True)
+    json = client.get(f"/report?token={token}").json
 
     assert json["data"]["success"]
 
@@ -201,16 +207,17 @@ def test_prepare_with_sig_prop_operations(
 # only need test integration of models/handlers/components/views and to
 # validate that the MetadataOperator is actually called/Bag is updated
 def test_prepare_with_sig_prop_missing_file(
-    client,
     testing_config,
     minimal_request_body,
-    wait_for_report,
 ):
     """
     Test functionality of /prepare-POST endpoint for non-empty
     sigPropOperations and missing significant_properties.xml in original
     IP.
     """
+
+    app = app_factory(testing_config())
+    client = app.test_client()
 
     altered_ip = str(uuid4())
 
@@ -263,14 +270,14 @@ def test_prepare_with_sig_prop_missing_file(
 
     # submit job
     response = client.post("/prepare", json=minimal_request_body)
-    assert client.put("/orchestration?until-idle", json={}).status_code == 200
 
     assert response.status_code == 201
     assert response.mimetype == "application/json"
     token = response.json["value"]
 
     # wait until job is completed
-    json = wait_for_report(client, token)
+    app.extensions["orchestra"].stop(stop_on_idle=True)
+    json = client.get(f"/report?token={token}").json
 
     assert json["data"]["success"]
 
