@@ -2,17 +2,18 @@ from setuptools import setup
 
 
 setup(
-    version="1.0.0",
+    version="1.2.0",
     name="dcm-preparation-module",
     description="flask app for dcm-preparation-module-containers",
     author="LZV.nrw",
     install_requires=[
         "flask==3.*",
         "PyYAML==6.*",
-        "bagit>=1.7.0,<2.0.0",
+        "lxml==5.*",
+        "bagit-utils>=1.2.0,<2.0.0",
         "data-plumber-http>=1.0.0,<2",
         "dcm-common[services, orchestra]>=4.0.0,<5",
-        "dcm-preparation-module-api>=1.0.0,<2",
+        "dcm-preparation-module-api>=1.1.0,<2",
     ],
     packages=[
         "dcm_preparation_module",

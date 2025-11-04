@@ -5,7 +5,7 @@ Test module for the package `dcm-preparation-module-sdk`.
 from time import sleep
 
 import pytest
-from bagit import Bag
+from bagit_utils import Bag
 import dcm_preparation_module_sdk
 
 from dcm_preparation_module import app_factory
@@ -145,6 +145,11 @@ def test_prepare_report_404(
         (
             [
                 {
+                    "type": "set",
+                    "targetField": "field",
+                    "value": "initial value",
+                },
+                {
                     "type": "complement",
                     "targetField": "field",
                     "value": "new value",
@@ -221,8 +226,8 @@ def test_prepare_sdk_patch_broken_operations_anyof(
                 sleep(0.1)
         assert report.data.success
         assert (testing_config().FS_MOUNT_POINT / report.data.path).is_dir()
-        output_bag = Bag(str(testing_config.FS_MOUNT_POINT / report.data.path))
-        assert output_bag.is_valid()
+        output_bag = Bag(testing_config.FS_MOUNT_POINT / report.data.path)
+        assert output_bag.validate_format().valid
 
 
 def test_prepare_report_multiple_baginfo_operations(
@@ -270,6 +275,11 @@ def test_prepare_report_multiple_baginfo_operations(
                             }
                         ],
                     },
+                    {
+                        "type": "set",
+                        "targetField": "b",
+                        "value": "new value",
+                    },
                 ],
             }
         }
@@ -286,13 +296,14 @@ def test_prepare_report_multiple_baginfo_operations(
     assert report.data.success
 
     assert (testing_config().FS_MOUNT_POINT / report.data.path).is_dir()
-    input_bag = Bag(str(fixtures / "test_ip"))
-    output_bag = Bag(str(testing_config.FS_MOUNT_POINT / report.data.path))
-    assert output_bag.is_valid()
+    input_bag = Bag(fixtures / "test_ip")
+    output_bag = Bag(testing_config.FS_MOUNT_POINT / report.data.path)
+    assert output_bag.validate_format().valid
 
-    assert "a" in output_bag.info
-    assert "a" not in input_bag.info
-    assert output_bag.info["a"] == "final value"
+    assert "a" in output_bag.baginfo
+    assert "a" not in input_bag.baginfo
+    assert output_bag.baginfo["a"] == ["final value"]
+    assert output_bag.baginfo["b"] == ["new value"]
 
 
 def test_prepare_report_multiple_sig_prop_operations(
@@ -340,6 +351,11 @@ def test_prepare_report_multiple_sig_prop_operations(
                             }
                         ],
                     },
+                    {
+                        "type": "set",
+                        "targetField": "appearance",
+                        "value": "new value",
+                    },
                 ],
             }
         }
@@ -357,8 +373,8 @@ def test_prepare_report_multiple_sig_prop_operations(
 
     assert (testing_config().FS_MOUNT_POINT / report.data.path).is_dir()
     assert Bag(
-        str(testing_config.FS_MOUNT_POINT / report.data.path)
-    ).is_valid()
+        testing_config.FS_MOUNT_POINT / report.data.path
+    ).validate().valid
 
     input_sigprop = PreparationView.load_significant_properties(
         fixtures / "test_ip" / testing_config.SIGPROP_FILE_PATH,
@@ -374,3 +390,4 @@ def test_prepare_report_multiple_sig_prop_operations(
     assert "structure" not in input_sigprop
     assert "structure" in output_sigprop
     assert output_sigprop["structure"] == "final value"
+    assert output_sigprop["appearance"] == "new value"

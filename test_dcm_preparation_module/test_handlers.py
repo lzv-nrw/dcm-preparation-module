@@ -41,6 +41,11 @@ def _preparation_handler(fixtures):
                         "target": {"path": "test_ip"},
                         "bagInfoOperations": [
                             {
+                                "type": "set",
+                                "targetField": "field",
+                                "value": "some value",
+                            },
+                            {
                                 "type": "complement",
                                 "targetField": "field",
                                 "value": "some value",
@@ -103,6 +108,22 @@ def _preparation_handler(fixtures):
                         "target": {"path": "test_ip"},
                         "bagInfoOperations": [
                             {
+                                "type": "set",
+                                "targetField": "field",
+                                "value": "some value",
+                                "unknown": None,
+                            }
+                        ],
+                    },
+                },
+                400,
+            ),
+            (
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                        "bagInfoOperations": [
+                            {
                                 "type": "complement",
                                 "targetField": "field",
                                 "value": "some value",
@@ -139,6 +160,64 @@ def _preparation_handler(fixtures):
                                 "targetField": "field",
                                 "items": [],
                                 "unknown": None,
+                            }
+                        ],
+                    },
+                },
+                400,
+            ),
+            (  # bad set
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                        "bagInfoOperations": [
+                            {
+                                "type": "set",
+                                "value": "some value",
+                            }
+                        ],
+                    },
+                },
+                400,
+            ),
+            (
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                        "bagInfoOperations": [
+                            {
+                                "type": "set",
+                                "targetField": "field",
+                            }
+                        ],
+                    },
+                },
+                400,
+            ),
+            (
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                        "bagInfoOperations": [
+                            {
+                                "type": "set",
+                                "targetField": None,
+                                "value": "some value",
+                            }
+                        ],
+                    },
+                },
+                400,
+            ),
+            (
+                {
+                    "preparation": {
+                        "target": {"path": "test_ip"},
+                        "bagInfoOperations": [
+                            {
+                                "type": "set",
+                                "targetField": "field",
+                                "value": None,
                             }
                         ],
                     },

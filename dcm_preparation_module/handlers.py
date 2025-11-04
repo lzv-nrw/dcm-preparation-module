@@ -9,6 +9,7 @@ from dcm_common.services.handlers import TargetPath, UUID
 from dcm_preparation_module.models import (
     Target,
     PreparationConfig,
+    SetOperation,
     ComplementOperation,
     OverwriteExistingOperation,
     FindAndReplaceOperation,
@@ -52,6 +53,19 @@ def get_preparation_handler(cwd: Path):
             ): DPOperationType(enum=[type_.value]),
             Property("targetField", required=True): String(),
         }
+
+    set_operation_object = Object(
+        model=lambda **json: SetOperation.from_json(json),
+        properties=get_base_operation_properties(OperationType.SET)
+        | {
+            Property("value", required=True): String(),
+        },
+        accept_only=[
+            "type",
+            "targetField",
+            "value",
+        ],
+    )
 
     complement_operation_object = Object(
         model=lambda **json: ComplementOperation.from_json(json),
@@ -147,7 +161,8 @@ def get_preparation_handler(cwd: Path):
                         required=False,
                         default=lambda **kwargs: [],
                     ): Array(
-                        items=complement_operation_object
+                        items=set_operation_object
+                        | complement_operation_object
                         | overwrite_existing_operation_object
                         | find_and_replace_operation_object
                         | find_and_replace_literal_operation_object
@@ -158,7 +173,8 @@ def get_preparation_handler(cwd: Path):
                         required=False,
                         default=lambda **kwargs: [],
                     ): Array(
-                        items=complement_operation_object
+                        items=set_operation_object
+                        | complement_operation_object
                         | overwrite_existing_operation_object
                         | find_and_replace_operation_object
                         | find_and_replace_literal_operation_object

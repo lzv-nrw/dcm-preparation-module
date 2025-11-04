@@ -4,6 +4,7 @@ from dcm_common.models.data_model import get_model_serialization_test
 
 from dcm_preparation_module.models import (
     OperationType,
+    SetOperation,
     ComplementOperation,
     OverwriteExistingOperation,
     FindAndReplaceOperationItem,
@@ -17,6 +18,20 @@ def test_operation_type_enum():
     """Test enums of class `OperationType`."""
     assert OperationType.COMPLEMENT.value == "complement"
     assert OperationType("complement") == OperationType.COMPLEMENT
+
+
+test_set_operation_json = get_model_serialization_test(
+    SetOperation,
+    (
+        (
+            (),
+            {
+                "target_field": "target field",
+                "value": "new value",
+            },
+        ),
+    ),
+)
 
 
 test_complement_operation_json = get_model_serialization_test(

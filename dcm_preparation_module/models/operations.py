@@ -11,6 +11,7 @@ from dcm_common.models import DataModel
 class OperationType(Enum):
     """Enum class for the operation type."""
 
+    SET = "set"
     COMPLEMENT = "complement"
     OVERWRITE_EXISTING = "overwriteExisting"
     FIND_AND_REPLACE = "findAndReplace"
@@ -66,6 +67,24 @@ class BaseOperation(DataModel):
     @classmethod
     def from_json(cls, json):
         return super().from_json(json | {"type": cls._TYPE})
+
+
+class SetOperation(BaseOperation):
+    """
+    Data model for SetOperation.
+
+    Inherits from BaseOperation and sets type_.
+
+    Additional keyword arguments:
+    value -- value for the target metadata field
+    """
+
+    _TYPE = OperationType.SET
+    value: str
+
+    def __init__(self, value: str, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.value = value
 
 
 class ComplementOperation(BaseOperation):
@@ -161,6 +180,7 @@ class FindAndReplaceLiteralOperation(BaseOperation):
 
 
 OPERATIONS_INDEX = {
+    "set": SetOperation,
     "complement": ComplementOperation,
     "overwriteExisting": OverwriteExistingOperation,
     "findAndReplace": FindAndReplaceOperation,

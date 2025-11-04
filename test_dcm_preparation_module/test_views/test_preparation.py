@@ -4,7 +4,7 @@ from shutil import copytree
 from uuid import uuid4
 
 import pytest
-from bagit import Bag
+from bagit_utils import Bag
 
 from dcm_preparation_module import app_factory
 
@@ -38,8 +38,8 @@ def test_prepare_minimal(testing_config, minimal_request_body):
     assert "path" in json["data"]
     assert (testing_config.FS_MOUNT_POINT / json["data"]["path"]).is_dir()
     assert Bag(
-        str(testing_config.FS_MOUNT_POINT / json["data"]["path"])
-    ).is_valid()
+        testing_config.FS_MOUNT_POINT / json["data"]["path"]
+    ).validate_format().valid
 
 
 # details of bagInfoOperations are tested in component-tests, here we
@@ -59,6 +59,11 @@ def test_prepare_with_baginfo_operations(
     client = app.test_client()
 
     minimal_request_body["preparation"]["bagInfoOperations"] = [
+        {
+            "type": "set",
+            "targetField": "b",
+            "value": "value",
+        },
         {
             "type": "complement",
             "targetField": "a",
@@ -98,13 +103,16 @@ def test_prepare_with_baginfo_operations(
 
     assert "path" in json["data"]
     assert (testing_config.FS_MOUNT_POINT / json["data"]["path"]).is_dir()
-    input_bag = Bag(str(fixtures / "test_ip"))
-    output_bag = Bag(str(testing_config.FS_MOUNT_POINT / json["data"]["path"]))
-    assert output_bag.is_valid()
+    input_bag = Bag(fixtures / "test_ip")
+    assert input_bag.validate_format().valid
+    output_bag = Bag(testing_config.FS_MOUNT_POINT / json["data"]["path"])
+    assert output_bag.validate_format().valid
 
-    assert "a" in output_bag.info
-    assert "a" not in input_bag.info
-    assert output_bag.info["a"] == "final value"
+    assert "a" in output_bag.baginfo
+    assert "a" not in input_bag.baginfo
+    assert output_bag.baginfo["a"] == ["final value"]
+    assert "b" in output_bag.baginfo
+    assert output_bag.baginfo["b"] == ["value"]
 
 
 # details of sigPropOperations are tested in component-tests, here we
@@ -123,6 +131,11 @@ def test_prepare_with_sig_prop_operations(
     client = app.test_client()
 
     minimal_request_body["preparation"]["sigPropOperations"] = [
+        {
+            "type": "set",
+            "targetField": "appearance",
+            "value": "new value",
+        },
         {
             "type": "complement",
             "targetField": "structure",
@@ -162,8 +175,8 @@ def test_prepare_with_sig_prop_operations(
 
     assert "path" in json["data"]
     assert (testing_config.FS_MOUNT_POINT / json["data"]["path"]).is_dir()
-    output_bag = Bag(str(testing_config.FS_MOUNT_POINT / json["data"]["path"]))
-    assert output_bag.is_valid()
+    output_bag = Bag(testing_config.FS_MOUNT_POINT / json["data"]["path"])
+    assert output_bag.validate_format().valid
 
     assert (
         (
@@ -173,26 +186,38 @@ def test_prepare_with_sig_prop_operations(
         ).read_text(encoding="utf-8")
         == """<premis:premis xmlns:premis="http://www.loc.gov/premis/v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.loc.gov/premis/v3 https://www.loc.gov/standards/premis/premis.xsd" version="3.0">
   <premis:object xsi:type="premis:intellectualEntity">
+    <!-- Identifier points to the bag's payload directory that contains all representation subdirectories of the IE -->
     <premis:objectIdentifier>
       <premis:objectIdentifierType>Relative path</premis:objectIdentifierType>
       <premis:objectIdentifierValue>../data/</premis:objectIdentifierValue>
     </premis:objectIdentifier>
+    <!-- Significant property: CONTENT -->
     <premis:significantProperties>
       <premis:significantPropertiesType>content</premis:significantPropertiesType>
       <premis:significantPropertiesValue>overwritten value</premis:significantPropertiesValue>
     </premis:significantProperties>
+    <!-- Significant property: CONTEXT -->
     <premis:significantProperties>
       <premis:significantPropertiesType>context</premis:significantPropertiesType>
       <premis:significantPropertiesValue>final value</premis:significantPropertiesValue>
     </premis:significantProperties>
+    <!-- Significant property: APPEARANCE -->
     <premis:significantProperties>
       <premis:significantPropertiesType>appearance</premis:significantPropertiesType>
-      <premis:significantPropertiesValue>Original layout, including headings and paragraph breaks, must be preserved for human readability.</premis:significantPropertiesValue>
+      <premis:significantPropertiesValue>new value</premis:significantPropertiesValue>
     </premis:significantProperties>
+    <!-- Significant property: BEHAVIOR -->
     <premis:significantProperties>
       <premis:significantPropertiesType>behavior</premis:significantPropertiesType>
       <premis:significantPropertiesValue>Hyperlinks embedded in the document must remain functional and allow navigation to linked resources.</premis:significantPropertiesValue>
     </premis:significantProperties>
+    <!-- Significant property: STRUCTURE -->
+    <!-- Omitted in test-data
+      <premis:significantProperties>
+        <premis:significantPropertiesType>structure</premis:significantPropertiesType>
+        <premis:significantPropertiesValue>The section hierarchy and internal document organization must be maintained.</premis:significantPropertiesValue>
+      </premis:significantProperties>
+    -->
     <premis:significantProperties>
       <premis:significantPropertiesType>structure</premis:significantPropertiesType>
       <premis:significantPropertiesValue>new value</premis:significantPropertiesValue>
@@ -264,7 +289,12 @@ def test_prepare_with_sig_prop_missing_file(
         {
             "type": "complement",
             "targetField": "structure",
-            "value": "new value",
+            "value": "structure value",
+        },
+        {
+            "type": "complement",
+            "targetField": "context",
+            "value": "context value",
         },
     ]
 
@@ -301,8 +331,12 @@ def test_prepare_with_sig_prop_missing_file(
       <premis:objectIdentifierValue>../data/</premis:objectIdentifierValue>
     </premis:objectIdentifier>
     <premis:significantProperties>
+      <premis:significantPropertiesType>context</premis:significantPropertiesType>
+      <premis:significantPropertiesValue>context value</premis:significantPropertiesValue>
+    </premis:significantProperties>
+    <premis:significantProperties>
       <premis:significantPropertiesType>structure</premis:significantPropertiesType>
-      <premis:significantPropertiesValue>new value</premis:significantPropertiesValue>
+      <premis:significantPropertiesValue>structure value</premis:significantPropertiesValue>
     </premis:significantProperties>
   </premis:object>
 </premis:premis>

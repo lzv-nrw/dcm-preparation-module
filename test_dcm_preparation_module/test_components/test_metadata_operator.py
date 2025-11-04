@@ -4,6 +4,7 @@ import pytest
 
 from dcm_preparation_module.components import MetadataOperator
 from dcm_preparation_module.models import (
+    SetOperation,
     ComplementOperation,
     OverwriteExistingOperation,
     FindAndReplaceOperationItem,
@@ -22,6 +23,27 @@ def _mo():
     ("source_metadata", "operations", "expected_metadata"),
     (
         pytest_args := [
+            (  # set
+                {"y": "old"},
+                [
+                    SetOperation("new", target_field="x"),
+                ],
+                {"y": "old", "x": ["new"]},
+            ),
+            (
+                {"y": "old", "x": "old"},
+                [
+                    SetOperation("new", target_field="x"),
+                ],
+                {"y": "old", "x": ["new"]},
+            ),
+            (
+                {"y": "old", "x": ["old-0", "old-1"]},
+                [
+                    SetOperation("new", target_field="x"),
+                ],
+                {"y": "old", "x": ["new"]},
+            ),
             (  # complement
                 {"y": "old"},
                 [
@@ -124,8 +146,11 @@ def _mo():
                 {"y": "old", "x": ["new-0", "new-1", "old-123"]},
             ),
             (
-                {"y": "old"},
+                {},
                 [
+                    SetOperation(
+                        target_field="y", value="old"
+                    ),
                     ComplementOperation(target_field="x", value="new"),
                     OverwriteExistingOperation(
                         target_field="x", value="new-overwritten"
@@ -139,11 +164,14 @@ def _mo():
                         ],
                     ),
                 ],
-                {"y": "old", "x": ["new-replaced"]},
+                {"y": ["old"], "x": ["new-replaced"]},
             ),
             (
-                {"y": "old"},
+                {},
                 [
+                    SetOperation(
+                        target_field="y", value="old"
+                    ),
                     OverwriteExistingOperation(
                         target_field="x", value="new-overwritten"
                     ),
@@ -157,7 +185,7 @@ def _mo():
                         ],
                     ),
                 ],
-                {"y": "old", "x": ["new"]},
+                {"y": ["old"], "x": ["new"]},
             ),
             (  # findAndReplaceLiteral
                 {"y": "old"},

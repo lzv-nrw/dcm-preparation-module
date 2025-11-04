@@ -23,15 +23,17 @@ class AppConfig(FSConfig, OrchestratedAppConfig):
     <premis:objectIdentifier>
       <premis:objectIdentifierType>Relative path</premis:objectIdentifierType>
       <premis:objectIdentifierValue>../data/</premis:objectIdentifierValue>
-    </premis:objectIdentifier>{}
+    </premis:objectIdentifier>
   </premis:object>
 </premis:premis>
 """
+    SIGPROP_PREMIS_SIGNIFICANT_PROPERTY_PARENT = "object"  # element name from `SIGPROP_PREMIS_TEMPLATE`
     SIGPROP_PREMIS_SIGNIFICANT_PROPERTY_TEMPLATE = """
-    <premis:significantProperties>
+    <premis:significantProperties xmlns:premis="http://www.loc.gov/premis/v3">
       <premis:significantPropertiesType>{type_}</premis:significantPropertiesType>
       <premis:significantPropertiesValue>{value}</premis:significantPropertiesValue>
-    </premis:significantProperties>"""
+    </premis:significantProperties>
+    """
     SIGPROP_TYPES = [
         "content",
         "context",

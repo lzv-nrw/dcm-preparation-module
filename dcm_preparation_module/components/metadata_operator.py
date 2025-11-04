@@ -14,6 +14,7 @@ from dcm_common import LoggingContext as Context, Logger
 from dcm_preparation_module.models import (
     OperationType,
     BaseOperation,
+    SetOperation,
     ComplementOperation,
     OverwriteExistingOperation,
     FindAndReplaceOperation,
@@ -62,6 +63,18 @@ class MetadataOperator:
         """
         if isinstance(metadata.get(target_field), str):
             metadata[target_field] = [metadata[target_field]]
+
+    def _set(
+        self,
+        metadata: dict[str, str | list[str]],
+        operation: SetOperation,
+    ) -> None:
+        """
+        Implements `SetOperation`.
+
+        Modifies `metadata` in place.
+        """
+        metadata[operation.target_field] = [operation.value]
 
     def _complement(
         self,
@@ -170,6 +183,8 @@ class MetadataOperator:
         for operation in operations:
             pre_op_metadata = result.metadata.get(operation.target_field)
             match operation.type_:
+                case OperationType.SET:
+                    self._set(result.metadata, operation)
                 case OperationType.COMPLEMENT:
                     self._complement(result.metadata, operation)
                 case OperationType.OVERWRITE_EXISTING:

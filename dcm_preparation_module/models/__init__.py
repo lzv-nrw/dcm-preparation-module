@@ -2,6 +2,7 @@ from .target import Target
 from .operations import (
     OperationType,
     BaseOperation,
+    SetOperation,
     ComplementOperation,
     OverwriteExistingOperation,
     FindAndReplaceOperationItem,
@@ -18,6 +19,7 @@ __all__ = [
     "Target",
     "OperationType",
     "BaseOperation",
+    "SetOperation",
     "ComplementOperation",
     "OverwriteExistingOperation",
     "FindAndReplaceOperationItem",

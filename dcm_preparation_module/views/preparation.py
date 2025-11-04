@@ -5,12 +5,12 @@ Preparation View-class definition
 from typing import Optional
 from shutil import copytree
 from pathlib import Path
-from xml.etree import ElementTree
 from functools import partial
 import os
 from uuid import uuid4
 
-from bagit import Bag
+from lxml import etree as ET
+from bagit_utils import Bag
 from flask import Blueprint, jsonify, Response, request
 from data_plumber_http.decorators import flask_handler, flask_args, flask_json
 from dcm_common import LoggingContext
@@ -91,28 +91,39 @@ class PreparationView(services.OrchestratedView):
         """
         Returns contents of 'bag-info.txt'.
         """
-        return bag.info
+        return bag.baginfo
 
     def apply_baginfo(self, bag: Bag, result: ProcessResult) -> dict:
         """
         Updates contents of `bag.info`.
         """
-        bag.info = result.metadata
+        bag.set_baginfo(result.metadata)
 
-    @staticmethod
-    def load_significant_properties(path: Path, ns: str) -> dict:
+    @classmethod
+    def load_significant_properties(cls, path: Path, ns: str) -> dict:
         """
         Returns existing 'significant_properties.xml'-metadata as dictionary or
         an empty dict if not existing.
         """
+
         # check conditions
         if not path.is_file():
             return {}
 
         # parse
-        et = ElementTree.fromstring(path.read_text(encoding="utf-8"))
+        et = ET.fromstring(path.read_text(encoding="utf-8"))
+        return cls.load_significant_properties_from_tree(et, ns)
+
+    @staticmethod
+    def load_significant_properties_from_tree(
+        sig_prop_et: ET._Element, ns: str
+    ) -> dict:
+        """
+        Returns 'significant_properties.xml'-metadata as dictionary.
+        """
+        # parse
         try:
-            significant_properties = et.find(f"{ns}object").findall(
+            significant_properties = sig_prop_et.find(f"{ns}object").findall(
                 f"{ns}significantProperties"
             )
         except AttributeError:
@@ -127,33 +138,109 @@ class PreparationView(services.OrchestratedView):
         return result
 
     def apply_significant_properties(
-        self, path: Path, result: ProcessResult
-    ) -> dict:
+        self,
+        path: Path,
+        sig_prop_et: ET._Element,
+        ns: str,
+        result: ProcessResult
+    ) -> None:
         """
-        Updates contents of 'significant_properties.xml'.
+        Updates significant properties metadata and writes the xml file.
         """
         # check conditions
         if not result.metadata:
             return
 
+        # replace values for existing types
+        existing_types = []
+        for p in sig_prop_et.find(f"{ns}object").findall(
+            f"{ns}significantProperties"
+        ):
+            type_ = p.find(f"{ns}significantPropertiesType")
+            value = p.find(f"{ns}significantPropertiesValue")
+            if type_ is None or value is None:
+                continue
+            existing_types.append(type_.text)
+            value.text = (
+                result.metadata[type_.text]
+                if isinstance(result.metadata[type_.text], str)
+                else result.metadata[type_.text][0]
+            )
+
+        # add values for new types
+        new_types = list(
+            filter(
+                lambda x: x in result.metadata and x not in existing_types,
+                self.config.SIGPROP_TYPES,
+            )
+        )
+        if new_types:
+            # find the parent and add new elements
+            if (parent_el := sig_prop_et.find(
+                f"{ns}{self.config.SIGPROP_PREMIS_SIGNIFICANT_PROPERTY_PARENT}"
+            )) is not None:
+                # --- Adjust indentation after manually adding elements ---
+                # lxml does not automatically reindent when elements are
+                # appended to an existing tree. This ensures pretty-printed
+                # structure for the new elements when the tree is serialized.
+
+                def set_indent(
+                    target_el: ET._Element,
+                    depth: int,
+                    in_text: bool = False,
+                ):
+                    """
+                    Set indentation for XML nodes by inserting line breaks and
+                    spaces using `.text` and `.tail`.
+
+                    Keyword arguments:
+                    target_el -- target element to set indentation on
+                    depth -- indentation depth
+                    in_text -- If True, set the `.text` attribute.
+                               Otherwise set the `.tail` attribute.
+                               (default False)
+                    """
+                    indent = "\n" + "  " * depth
+                    if in_text:
+                        target_el.text = indent
+                    else:
+                        target_el.tail = indent
+
+                # determine parent depth (number of ancestor levels)
+                depth = len(parent_el.xpath("ancestor::*"))
+                # --- Fix indentation for the opening tag ---
+                if len(siblings := parent_el.getchildren()) > 0:
+                    # in the tail of the last existing sibling
+                    set_indent(siblings[-1], depth + 1)
+                else:
+                    # in the text of the parent element (no prior siblings)
+                    set_indent(parent_el, depth + 1, in_text=True)
+                # create and append new elements
+                last_index = len(new_types) - 1
+                for i, type_ in enumerate(new_types):
+                    # create new element from XML string template
+                    new_element_str = self.config.SIGPROP_PREMIS_SIGNIFICANT_PROPERTY_TEMPLATE.format(
+                        type_=type_,
+                        value=(
+                            result.metadata[type_]
+                            if isinstance(result.metadata[type_], str)
+                            else result.metadata[type_][0]
+                        ),
+                    )
+                    # parse string into an ET._Element
+                    new_element = ET.fromstring(new_element_str)
+                    # --- Fix indentation after each new element ---
+                    # Use deeper indent if another element follows,
+                    # otherwise apply parent-level indent.
+                    set_indent(
+                        new_element, depth + (0 if (i == last_index) else 1)
+                    )
+                    # append element
+                    parent_el.append(new_element)
+
         # write to file
         path.write_text(
-            self.config.SIGPROP_PREMIS_TEMPLATE.format(
-                "".join(
-                    [
-                        self.config.SIGPROP_PREMIS_SIGNIFICANT_PROPERTY_TEMPLATE.format(
-                            type_=type_,
-                            value=(
-                                result.metadata[type_]
-                                if isinstance(result.metadata[type_], str)
-                                else result.metadata[type_][0]
-                            ),
-                        )
-                        for type_ in self.config.SIGPROP_TYPES
-                        if type_ in result.metadata
-                    ]
-                )
-            ),
+            ET.tostring(sig_prop_et, pretty_print=True).decode("utf-8"),
             encoding="utf-8",
         )
 
@@ -204,7 +291,18 @@ class PreparationView(services.OrchestratedView):
             info.report.data.path,
             dirs_exist_ok=True,
         )
-        bag = Bag(str(info.report.data.path))
+        bag = Bag(info.report.data.path)
+
+        # create significant properties ET
+        sig_prop_file = (info.report.data.path / self.config.SIGPROP_FILE_PATH)
+        if sig_prop_file.is_file():
+            # parse existing file
+            sig_prop_et = ET.fromstring(
+                sig_prop_file.read_text(encoding="utf-8")
+            )
+        else:
+            # create empty tree from template
+            sig_prop_et = ET.fromstring(self.config.SIGPROP_PREMIS_TEMPLATE)
 
         # prepare IP
         for stage, src_md, operations, apply in [
@@ -216,17 +314,22 @@ class PreparationView(services.OrchestratedView):
             ),
             (
                 "sigPropOperations",
-                self.load_significant_properties(
-                    info.report.data.path / self.config.SIGPROP_FILE_PATH,
+                self.load_significant_properties_from_tree(
+                    sig_prop_et,
                     self.config.SIGPROP_PREMIS_NAMESPACE,
                 ),
                 preparation_config.sig_prop_operations,
                 partial(
                     self.apply_significant_properties,
                     info.report.data.path / self.config.SIGPROP_FILE_PATH,
+                    sig_prop_et,
+                    self.config.SIGPROP_PREMIS_NAMESPACE,
                 ),
             ),
         ]:
+            # continue if no operations are requested
+            if len(operations) == 0:
+                continue
             # process on metadata
             operator_result = self.metadata_operator.process(
                 source_metadata=src_md,
@@ -254,8 +357,7 @@ class PreparationView(services.OrchestratedView):
             apply(operator_result)
 
         # Generate new tag-manifest files
-        # (manifests=False -> manifest files do not have to be updated)
-        bag.save(processes=1, manifests=False)
+        bag.set_tag_manifests()
 
         # set success and log
         info.report.data.success = True
