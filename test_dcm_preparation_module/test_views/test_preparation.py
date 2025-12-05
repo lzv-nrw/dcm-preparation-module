@@ -14,7 +14,9 @@ def _minimal_request_body():
     return {"preparation": {"target": {"path": str("test_ip")}}}
 
 
-def test_prepare_minimal(testing_config, minimal_request_body):
+def test_prepare_minimal(
+    testing_config, minimal_request_body, test_ip_baginfo
+):
     """
     Test minimal functionality of /prepare-POST endpoint
     (no operations).
@@ -36,6 +38,8 @@ def test_prepare_minimal(testing_config, minimal_request_body):
 
     assert json["data"]["success"]
     assert "path" in json["data"]
+    assert "bagInfoMetadata" in json["data"]
+    assert json["data"]["bagInfoMetadata"] == test_ip_baginfo
     assert (testing_config.FS_MOUNT_POINT / json["data"]["path"]).is_dir()
     assert Bag(
         testing_config.FS_MOUNT_POINT / json["data"]["path"]

@@ -356,6 +356,9 @@ class PreparationView(services.OrchestratedView):
 
             apply(operator_result)
 
+        # Collect baginfo
+        info.report.data.baginfo_metadata = self.load_baginfo(bag)
+
         # Generate new tag-manifest files
         bag.set_tag_manifests()
 

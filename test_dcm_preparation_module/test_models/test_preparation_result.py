@@ -12,5 +12,7 @@ test_build_result_json = get_model_serialization_test(
         ((Path("."),), {}),
         ((), {"success": True}),
         ((Path("."), True), {}),
+        ((Path("."), True, {"d": ["1", "2"]}), {}),
+        ((), {"success": True, "baginfo_metadata": {"d": ["1", "2"]},}),
     )
 )

@@ -14,8 +14,8 @@ RUN mv /app/dcm-preparation-module/app.py /app/app.py
 # install app package
 RUN pip install --upgrade \
     --extra-index-url https://zivgitlab.uni-muenster.de/api/v4/projects/9020/packages/pypi/simple \
-    "dcm-preparation-module/[cors]"
-RUN rm -r dcm-preparation-module/
+    "/app/dcm-preparation-module/[cors]"
+RUN rm -r /app/dcm-preparation-module/
 
 # install wsgi server
 RUN pip install gunicorn

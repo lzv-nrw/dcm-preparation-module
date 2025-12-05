@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.0] - 2025-12-05
+
+### Changed
+
+- updated Dockerfile to latest standard 
+
+### Added
+
+- added bag-info-metadata to `JobData`
+
 ## [1.2.0] - 2025-11-04
 
 ### Changed

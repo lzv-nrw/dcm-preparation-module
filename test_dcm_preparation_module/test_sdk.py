@@ -100,6 +100,7 @@ def test_prepare_report_minimal(
             assert e.status == 503
             sleep(0.1)
     assert report.data.success
+    assert report.data.bag_info_metadata
     assert (testing_config().FS_MOUNT_POINT / report.data.path).is_dir()
 
 
@@ -304,6 +305,7 @@ def test_prepare_report_multiple_baginfo_operations(
     assert "a" not in input_bag.baginfo
     assert output_bag.baginfo["a"] == ["final value"]
     assert output_bag.baginfo["b"] == ["new value"]
+    assert report.data.bag_info_metadata == output_bag.baginfo
 
 
 def test_prepare_report_multiple_sig_prop_operations(
